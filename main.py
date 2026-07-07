@@ -1,6 +1,6 @@
 from fastapi import FastAPI, UploadFile, File
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import Response, FileResponse
+from fastapi.responses import Response
 from PIL import Image
 from transformers import pipeline
 import io
@@ -24,7 +24,7 @@ def keep_alive():
     if not url:
         return
     while True:
-        time.sleep(600)  # every 10 minutes
+        time.sleep(600)
         try:
             urllib.request.urlopen(f"{url}/health", timeout=10)
             print("Keep-alive ping sent")
@@ -34,25 +34,23 @@ def keep_alive():
 threading.Thread(target=keep_alive, daemon=True).start()
 
 
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
+
 @app.post("/api/remove-bg")
 async def remove_background(file: UploadFile = File(...)):
-    # Read uploaded image
     contents = await file.read()
     image = Image.open(io.BytesIO(contents)).convert("RGB")
 
-    # Run segmentation
     result = segmenter(image)
 
-    # Get the mask and apply it
-    # The pipeline returns a list of dicts with 'mask' and 'label'
-    # For RMBG-1.4, the first result contains the foreground mask
     mask = result[0]["mask"]
 
-    # Convert original to RGBA and apply mask
     image_rgba = image.convert("RGBA")
     image_rgba.putalpha(mask)
 
-    # Save to bytes
     buf = io.BytesIO()
     image_rgba.save(buf, format="PNG", optimize=True)
     buf.seek(0)
@@ -60,14 +58,9 @@ async def remove_background(file: UploadFile = File(...)):
     return Response(
         content=buf.getvalue(),
         media_type="image/png",
-        headers={"Content-Disposition": f"attachment; filename=no_bg.png"},
+        headers={"Content-Disposition": "attachment; filename=no_bg.png"},
     )
 
 
-@app.get("/health")
-async def health():
-    return {"status": "ok"}
-
-
-# Serve static files (frontend)
+# Static files LAST — so API routes take priority
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
