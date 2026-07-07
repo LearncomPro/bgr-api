@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Background Remover</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: #f4f5f8; color: #1a1a2e; padding: 24px;
+}
+.card {
+  width: 100%; max-width: 700px; background: #fff;
+  border-radius: 14px; padding: 36px 32px;
+  box-shadow: 0 2px 12px rgba(0,0,0,.07);
+}
+h1 { font-size: 22px; font-weight: 700; letter-spacing: -.02em; margin-bottom: 4px; }
+.sub { font-size: 13px; color: #888; margin-bottom: 24px; }
+.drop {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  border: 2px dashed #c5c9d6; border-radius: 12px; padding: 44px 20px;
+  cursor: pointer; transition: all .2s; margin-bottom: 20px;
+}
+.drop.over { border-color: #e85d75; background: rgba(232,93,117,.05); }
+.drop svg { margin-bottom: 10px; }
+.drop .name { font-size: 14px; font-weight: 500; }
+.drop input { display: none; }
+.hidden { display: none; }
+.status { font-size: 13px; color: #e85d75; margin-bottom: 16px; min-height: 18px; }
+.progress { width: 100%; height: 6px; background: #e2e5ea; border-radius: 3px; margin-bottom: 12px; overflow: hidden; }
+.progress-bar {
+  height: 100%; background: #e85d75; border-radius: 3px;
+  width: 0; animation: none;
+}
+.progress-bar.indeterminate {
+  width: 30%; animation: slide 1.2s ease-in-out infinite;
+}
+@keyframes slide {
+  0% { margin-left: 0; }
+  50% { margin-left: 70%; }
+  100% { margin-left: 0; }
+}
+.preview-area {
+  display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap;
+}
+.preview-box { flex: 1; min-width: 200px; text-align: center; }
+.preview-box .label {
+  font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: .04em;
+  margin-bottom: 6px;
+}
+.preview-box img {
+  max-width: 100%; max-height: 320px; border-radius: 8px;
+  border: 1px solid #e2e5ea; display: block; margin: 0 auto;
+}
+.result-wrap {
+  display: inline-block; border-radius: 8px; overflow: hidden;
+  border: 1px solid #e2e5ea;
+}
+.result-wrap img { border: none; }
+.checkerboard {
+  background-image:
+    linear-gradient(45deg, #ddd 25%, transparent 25%),
+    linear-gradient(-45deg, #ddd 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #ddd 75%),
+    linear-gradient(-45deg, transparent 75%, #ddd 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0px;
+}
+.actions { display: flex; gap: 12px; }
+.btn-download {
+  padding: 12px 24px; border-radius: 8px; border: none;
+  background: #38a169; color: #fff; font-size: 14px; font-weight: 600;
+  cursor: pointer; transition: background .2s;
+}
+.btn-download:hover { background: #2f855a; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Background Remover</h1>
+  <p class="sub">Usuń tło z grafiki — automatycznie.</p>
+
+  <label class="drop" id="dropZone">
+    <input type="file" accept="image/*" id="fileInput">
+    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#8b90a0" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+    <span class="name" id="dropLabel">Upuść grafikę lub kliknij</span>
+  </label>
+
+  <div class="progress hidden" id="progressWrap"><div class="progress-bar indeterminate" id="progressBar"></div></div>
+  <p class="status" id="status"></p>
+
+  <div class="preview-area hidden" id="previewArea">
+    <div class="preview-box">
+      <div class="label">Oryginał</div>
+      <img id="originalImg">
+    </div>
+    <div class="preview-box">
+      <div class="label">Bez tła</div>
+      <div class="result-wrap checkerboard">
+        <img id="resultImg">
+      </div>
+    </div>
+  </div>
+
+  <div class="actions hidden" id="actions">
+    <button class="btn-download" id="btnDownload">Pobierz PNG</button>
+  </div>
+</div>
+
+<script>
+const $ = s => document.getElementById(s);
+let resultURL = null;
+let fileName = '';
+
+const dropZone = $('dropZone');
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.classList.remove('over');
+  if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+});
+$('fileInput').addEventListener('change', () => {
+  if ($('fileInput').files[0]) handleFile($('fileInput').files[0]);
+});
+
+async function handleFile(f) {
+  if (!f.type.startsWith('image/')) { $('status').textContent = 'Wybierz plik graficzny.'; return; }
+
+  fileName = f.name.replace(/\.[^.]+$/, '');
+  $('dropLabel').textContent = f.name;
+  $('previewArea').classList.add('hidden');
+  $('actions').classList.add('hidden');
+  $('progressWrap').classList.remove('hidden');
+  $('status').textContent = 'Usuwanie tła...';
+
+  // Show original
+  const origURL = URL.createObjectURL(f);
+  $('originalImg').src = origURL;
+
+  try {
+    const formData = new FormData();
+    formData.append('file', f);
+
+    const resp = await fetch('/api/remove-bg', {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!resp.ok) {
+      const text = await resp.text();
+      throw new Error('Serwer zwrócił błąd: ' + resp.status + ' ' + text);
+    }
+
+    const blob = await resp.blob();
+    if (resultURL) URL.revokeObjectURL(resultURL);
+    resultURL = URL.createObjectURL(blob);
+    $('resultImg').src = resultURL;
+
+    $('previewArea').classList.remove('hidden');
+    $('actions').classList.remove('hidden');
+    $('progressWrap').classList.add('hidden');
+    $('status').textContent = 'Gotowe!';
+  } catch (e) {
+    $('status').textContent = 'Błąd: ' + e.message;
+    $('progressWrap').classList.add('hidden');
+    console.error(e);
+  }
+}
+
+$('btnDownload').addEventListener('click', () => {
+  if (!resultURL) return;
+  const a = document.createElement('a');
+  a.href = resultURL;
+  a.download = fileName + '_no_bg.png';
+  a.click();
+});
+</script>
+</body>
+</html>

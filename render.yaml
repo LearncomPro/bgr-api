@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: bg-remover
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
