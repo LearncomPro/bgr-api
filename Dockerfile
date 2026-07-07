@@ -2,14 +2,13 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Pre-download model at build time so it's baked into the image
 RUN python -c "from transformers import pipeline; pipeline('image-segmentation', model='briaai/RMBG-1.4', trust_remote_code=True)"
 
-# Copy app
 COPY . .
 
 EXPOSE 10000
