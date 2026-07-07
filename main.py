@@ -5,6 +5,8 @@ from PIL import Image
 from transformers import pipeline
 import io
 import time
+import threading
+import urllib.request
 
 app = FastAPI()
 
@@ -13,6 +15,23 @@ print("Loading RMBG-1.4 model...")
 start = time.time()
 segmenter = pipeline("image-segmentation", model="briaai/RMBG-1.4", trust_remote_code=True)
 print(f"Model loaded in {time.time() - start:.1f}s")
+
+
+# Self-ping to prevent Render free tier from sleeping
+def keep_alive():
+    import os
+    url = os.environ.get("RENDER_EXTERNAL_URL")
+    if not url:
+        return
+    while True:
+        time.sleep(600)  # every 10 minutes
+        try:
+            urllib.request.urlopen(f"{url}/health", timeout=10)
+            print("Keep-alive ping sent")
+        except Exception as e:
+            print(f"Keep-alive ping failed: {e}")
+
+threading.Thread(target=keep_alive, daemon=True).start()
 
 
 @app.post("/api/remove-bg")
