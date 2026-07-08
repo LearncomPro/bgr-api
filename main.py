@@ -1,9 +1,7 @@
 from fastapi import FastAPI, UploadFile, File
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import Response
-from PIL import Image, ImageFilter
-import numpy as np
-import onnxruntime as ort
+from rembg import remove, new_session
 import io
 import time
 import threading
@@ -11,36 +9,10 @@ import urllib.request
 
 app = FastAPI()
 
-print("Loading silueta ONNX model...")
+print("Loading rembg session...")
 start = time.time()
-session = ort.InferenceSession("/app/models/u2net.onnx", providers=["CPUExecutionProvider"])
-input_name = session.get_inputs()[0].name
-print(f"Model loaded in {time.time() - start:.1f}s")
-
-
-def preprocess(image, size=320):
-    img = image.convert("RGB").resize((size, size), Image.BILINEAR)
-    arr = np.array(img, dtype=np.float32) / 255.0
-    mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)
-    std = np.array([0.229, 0.224, 0.225], dtype=np.float32)
-    arr = (arr - mean) / std
-    arr = arr.transpose(2, 0, 1)[np.newaxis, ...]
-    return arr.astype(np.float32)
-
-
-def postprocess(output, original_size):
-    mask = output[0][0, 0]
-    mask = (mask - mask.min()) / (mask.max() - mask.min() + 1e-8)
-    mask_img = Image.fromarray((mask * 255).astype(np.uint8), mode="L")
-    mask_img = mask_img.resize(original_size, Image.BILINEAR)
-
-    # Dilate mask slightly to avoid cutting edges of foreground
-    mask_img = mask_img.filter(ImageFilter.MaxFilter(7))
-
-    # Smooth edges after dilation
-    mask_img = mask_img.filter(ImageFilter.GaussianBlur(radius=1))
-
-    return mask_img
+session = new_session("silueta")
+print(f"Session loaded in {time.time() - start:.1f}s")
 
 
 def keep_alive():
@@ -66,23 +38,19 @@ async def health():
 
 @app.post("/api/remove-bg")
 async def remove_background(file: UploadFile = File(...)):
-    contents = await file.read()
-    image = Image.open(io.BytesIO(contents)).convert("RGB")
-    original_size = image.size
+    input_bytes = await file.read()
 
-    input_tensor = preprocess(image)
-    outputs = session.run(None, {input_name: input_tensor})
-    mask = postprocess(outputs, original_size)
-
-    image_rgba = image.convert("RGBA")
-    image_rgba.putalpha(mask)
-
-    buf = io.BytesIO()
-    image_rgba.save(buf, format="PNG", optimize=True)
-    buf.seek(0)
+    output_bytes = remove(
+        input_bytes,
+        session=session,
+        alpha_matting=True,
+        alpha_matting_foreground_threshold=240,
+        alpha_matting_background_threshold=10,
+        alpha_matting_erode_size=10,
+    )
 
     return Response(
-        content=buf.getvalue(),
+        content=output_bytes,
         media_type="image/png",
         headers={"Content-Disposition": "attachment; filename=no_bg.png"},
     )
