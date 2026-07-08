@@ -7,9 +7,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Download U2Net ONNX model directly (~44MB)
+# Download U2NetP (portable/light) ONNX model (~4.7MB)
 RUN mkdir -p /app/models && \
-    curl -L -o /app/models/u2net.onnx "https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2net.onnx"
+    curl -L -o /app/models/u2net.onnx "https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2netp.onnx"
 
 COPY . .
 
