@@ -43,10 +43,6 @@ async def remove_background(file: UploadFile = File(...)):
     output_bytes = remove(
         input_bytes,
         session=session,
-        alpha_matting=True,
-        alpha_matting_foreground_threshold=240,
-        alpha_matting_background_threshold=10,
-        alpha_matting_erode_size=10,
     )
 
     return Response(
