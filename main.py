@@ -1,7 +1,7 @@
 from fastapi import FastAPI, UploadFile, File
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import Response
-from PIL import Image
+from PIL import Image, ImageFilter
 import numpy as np
 import onnxruntime as ort
 import io
@@ -11,8 +11,7 @@ import urllib.request
 
 app = FastAPI()
 
-# Load ONNX model once at startup
-print("Loading U2Net ONNX model...")
+print("Loading silueta ONNX model...")
 start = time.time()
 session = ort.InferenceSession("/app/models/u2net.onnx", providers=["CPUExecutionProvider"])
 input_name = session.get_inputs()[0].name
@@ -34,10 +33,16 @@ def postprocess(output, original_size):
     mask = (mask - mask.min()) / (mask.max() - mask.min() + 1e-8)
     mask_img = Image.fromarray((mask * 255).astype(np.uint8), mode="L")
     mask_img = mask_img.resize(original_size, Image.BILINEAR)
+
+    # Dilate mask slightly to avoid cutting edges of foreground
+    mask_img = mask_img.filter(ImageFilter.MaxFilter(7))
+
+    # Smooth edges after dilation
+    mask_img = mask_img.filter(ImageFilter.GaussianBlur(radius=1))
+
     return mask_img
 
 
-# Self-ping to prevent Render free tier from sleeping
 def keep_alive():
     import os
     url = os.environ.get("RENDER_EXTERNAL_URL")
@@ -83,5 +88,4 @@ async def remove_background(file: UploadFile = File(...)):
     )
 
 
-# Static files LAST
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
