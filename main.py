@@ -4,7 +4,6 @@ from fastapi.responses import Response
 from PIL import Image
 import numpy as np
 import onnxruntime as ort
-from huggingface_hub import hf_hub_download
 import io
 import time
 import threading
@@ -15,14 +14,12 @@ app = FastAPI()
 # Load ONNX model once at startup
 print("Loading U2Net ONNX model...")
 start = time.time()
-model_path = hf_hub_download("danielgatis/rembg", "u2net.onnx", cache_dir="/app/models")
-session = ort.InferenceSession(model_path, providers=["CPUExecutionProvider"])
+session = ort.InferenceSession("/app/models/u2net.onnx", providers=["CPUExecutionProvider"])
 input_name = session.get_inputs()[0].name
 print(f"Model loaded in {time.time() - start:.1f}s")
 
 
 def preprocess(image, size=320):
-    """Resize and normalize image for U2Net."""
     img = image.convert("RGB").resize((size, size), Image.BILINEAR)
     arr = np.array(img, dtype=np.float32) / 255.0
     mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)
@@ -33,7 +30,6 @@ def preprocess(image, size=320):
 
 
 def postprocess(output, original_size):
-    """Convert model output to alpha mask."""
     mask = output[0][0, 0]
     mask = (mask - mask.min()) / (mask.max() - mask.min() + 1e-8)
     mask_img = Image.fromarray((mask * 255).astype(np.uint8), mode="L")

@@ -2,11 +2,14 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Pre-download the ONNX model at build time (~44MB)
-RUN python -c "from huggingface_hub import hf_hub_download; hf_hub_download('danielgatis/rembg', 'u2net.onnx', cache_dir='/app/models')"
+# Download U2Net ONNX model directly (~44MB)
+RUN mkdir -p /app/models && \
+    curl -L -o /app/models/u2net.onnx "https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2net.onnx"
 
 COPY . .
 
